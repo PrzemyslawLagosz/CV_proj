@@ -4,28 +4,159 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, error = FALSE, message=FALSE)
 ```
 
 # Cleaning data from https://www.kaggle.com/datasets/rajeevw/ufcdata?select=raw_fighter_details.csv
-```{r echo= FALSE}
+```{r}
 library(ggplot2)
 library(tidyverse)
 library(readr)
 library(dplyr)
+library(knitr)
+library(kableExtra)
+```
+```{r}
+my_knit <- function(df, n = 5) {
+  kableExtra::kable_styling(knitr::kable(head(df ,n)), bootstrap_options = "striped", full_width = FALSE)
+}
 ```
 
-```{r importing data, message= FALSE}
+```{r importing data}
 raw_fighter_details <- read_csv("raw_fighter_details.csv")
-raw_fighter_details
+my_knit(raw_fighter_details)
+```
+### Removing rows with NA
+```{r}
+raw_fighter_details <- raw_fighter_details[!is.na(raw_fighter_details$Reach),]
+raw_fighter_details <- raw_fighter_details[!is.na(raw_fighter_details$Height),]
+
+## Replacing a NA stance with "Orthodox"
+
+which(is.na(raw_fighter_details$Stance))
+
+to_Orthodox <- which(is.na(raw_fighter_details$Stance))
+
+raw_fighter_details$Stance[to_Orthodox] <- "Orthodox"
+
 ```
 
-## Including Plots
+### Columns with % sufix "Str_Acc %" "Str_Def %" "TD_Acc %"  "TD_Def %"
+```{r}
+columns_percentage_suffix <- colnames(raw_fighter_details)[c(8,10,12,13)]
+columns_percentage_suffix
 
-You can also embed plots, for example:
+#Replacment % with space
+raw_fighter_details[,columns_percentage_suffix] <- lapply(raw_fighter_details[,columns_percentage_suffix], gsub, pattern = "%", replacement = "")
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+#Chenging type of variables
+raw_fighter_details[,columns_percentage_suffix] <- lapply(raw_fighter_details[,columns_percentage_suffix], as.numeric)
+
+#Adding % to the Column names
+colnames(raw_fighter_details)[c(8,10,12,13)] <- paste0(colnames(raw_fighter_details)[c(8,10,12,13)], "_%")
+
+colnames(raw_fighter_details)[3] <- "Weight_(lbs)"
+
+raw_fighter_details[,3] <- lapply(raw_fighter_details[,3], gsub, pattern = "lbs.", replacement = "")
+raw_fighter_details[,3] <- lapply(raw_fighter_details[,3], as.numeric)
+```
+## Problem with the weight
+#### In UFC are 9 weight clasess, in ourdata we have got 38
+```{r}
+length(unique(raw_fighter_details$`Weight_(lbs)`))
+
+sort(unique(raw_fighter_details$`Weight_(lbs)`))
+weights <- sort(unique(raw_fighter_details$`Weight_(lbs)`))
+
+```
+# I decided to replace wrong values with the value above, because when we assign person to the weight class, if it pass certain value
+# it will be assigned to the weight class above. eg. We've got classes 205, and 265. 
+# All persons with weight above 205 are in 265 weight class
+```{r}
+weights[weights > 205]
+weights[weights > 205 & weights <= 265]
+
+to_265 = weights[weights > 205]
+
+to_145 = c(139, 140)
+
+to_170 = 168
+
+raw_fighter_details["Weight_(lbs)"] <- sapply(raw_fighter_details["Weight_(lbs)"],
+                             function(x) replace(x, x %in% to_265, 265))
+
+raw_fighter_details["Weight_(lbs)"] <- sapply(raw_fighter_details["Weight_(lbs)"],
+                             function(x) replace(x, x %in% to_145, 145))
+
+raw_fighter_details["Weight_(lbs)"] <- sapply(raw_fighter_details["Weight_(lbs)"],
+                             function(x) replace(x, x %in% to_170, 170))
+
+sort(unique(raw_fighter_details$`Weight_(lbs)`))
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Prepering dataframe for EU standard
+```{r}
+# Separating a weight column, to make kg cloumn 
+
+weight <- as.data.frame(raw_fighter_details$`Weight_(lbs)`)
+
+colnames(weight) <- "Weight_(kg)"
+
+weight <- weight %>% 
+  transmute(`Weight_(kg)` = round(`Weight_(kg)`*0.45359237))
+
+## Reach
+
+colnames(raw_fighter_details)[4] <- "Reach_(inches)"
+
+raw_fighter_details[,4] <- lapply(raw_fighter_details[,4], gsub, pattern = '"', replacement = "")
+raw_fighter_details[,4] <- lapply(raw_fighter_details[,4], as.numeric)
+
+# Making a reach column in centimeters
+reach <- as.data.frame(raw_fighter_details$`Reach_(inches)`)
+
+colnames(reach) <- "Reach_(cm)"
+
+reach <- reach %>% 
+  transmute(`Reach_(cm)` = round(`Reach_(cm)`*2.54))
+
+## Height
+# 1feet = 12 inches
+
+height <- lapply(raw_fighter_details[,2], str_split, pattern = " ", simplify = TRUE)
+
+height <- as.data.frame(height)
+colnames(height) <- c("Foots","Inches")
+
+
+height[,1] <- vapply(height[,1], gsub, pattern = "\'", replacement = "", FUN.VALUE = character(1))
+height[,2] <- vapply(height[,2], gsub, pattern = "\"", replacement = "", FUN.VALUE = character(1))
+
+height[,c(1:2)] <- lapply(height[,c(1:2)], as.numeric)
+
+height <- height %>%
+  mutate(Inches_only = Foots*12 + Inches,
+         cm = round(Inches_only*2.54))
+
+
+## Making EU and USA unit based dataframe
+
+## USA
+raw_fighter_details_USA <- raw_fighter_details
+
+## EU
+raw_fighter_details_EU <- raw_fighter_details %>%
+  mutate("Height" = height$cm,
+         "Weight_(lbs)" = weight$`Weight_(kg)`,
+         "Reach_(inches)" = reach$`Reach_(cm)`)
+
+colnames(raw_fighter_details_EU)[2:4] <- c("Height_(kg)", "Weight_(kg)", "Reach_(cm)")
+```
+
+```{r}
+my_knit(raw_fighter_details_EU)
+my_knit(raw_fighter_details_USA)
+
+```
+
