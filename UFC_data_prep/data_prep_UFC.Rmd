@@ -1,0 +1,31 @@
+---
+title: "data_prep_UFC"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Cleaning data from https://www.kaggle.com/datasets/rajeevw/ufcdata?select=raw_fighter_details.csv
+```{r echo= FALSE}
+library(ggplot2)
+library(tidyverse)
+library(readr)
+library(dplyr)
+```
+
+```{r importing data, message= FALSE}
+raw_fighter_details <- read_csv("raw_fighter_details.csv")
+raw_fighter_details
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
